@@ -10,7 +10,7 @@ import { getLocalizedDateFormatter } from '../base/i18n/dateUtil';
 import i18next from '../base/i18n/i18next';
 import { MEET_FEATURES } from '../base/jwt/constants';
 import { isJwtFeatureEnabled } from '../base/jwt/functions';
-import { getParticipantById, isPrivateChatEnabled } from '../base/participants/functions';
+import { getLocalParticipant, getParticipantById, isPrivateChatEnabled } from '../base/participants/functions';
 import { IParticipant } from '../base/participants/types';
 import { escapeRegexp } from '../base/util/helpers';
 import { arePollsDisabled } from '../conference/functions.any';
@@ -437,6 +437,28 @@ const NO_SEARCH_MATCHES: IMessage[] = [];
 const _getMessages = (state: IReduxState) => state['features/chat'].messages;
 
 /**
+ * Returns the meeting-scoped Blotter filter.
+ *
+ * @param {IReduxState} state - The redux state.
+ * @returns {'all' | 'mine'}
+ */
+export function getBlotterMessageFilter(state: IReduxState) {
+    return state['features/chat'].messageFilter;
+}
+
+/**
+ * Returns messages visible under the current All/Mine filter.
+ */
+export const getFilteredBlotterMessages = createSelector(
+    _getMessages,
+    getBlotterMessageFilter,
+    (state: IReduxState) => getLocalParticipant(state)?.id,
+    (messages, filter, localParticipantId): IMessage[] => filter === 'mine'
+        ? messages.filter(message => message.participantId === localParticipantId)
+        : messages
+);
+
+/**
  * Returns all messages matching the current search query, in display order.
  * Reaction and file messages are excluded since they have no searchable text.
  * Memoized: only recomputes when messages or the search query change.
@@ -444,7 +466,7 @@ const _getMessages = (state: IReduxState) => state['features/chat'].messages;
  * @returns {IMessage[]}
  */
 export const getChatSearchMatches = createSelector(
-    _getMessages,
+    getFilteredBlotterMessages,
     getChatSearchQuery,
     (messages, searchQuery): IMessage[] => {
         const query = searchQuery?.trim().toLowerCase();

@@ -1,7 +1,4 @@
-import { useSelector } from 'react-redux';
-
 import { SharedVideoButton } from './components';
-import { isSharedVideoEnabled } from './functions';
 
 const shareVideo = {
     key: 'sharedvideo',
@@ -15,10 +12,5 @@ const shareVideo = {
  *  @returns {Object | undefined}
  */
 export function useSharedVideoButton() {
-    const sharedVideoEnabled = useSelector(isSharedVideoEnabled);
-
-    if (sharedVideoEnabled) {
-        return shareVideo;
-    }
+    return shareVideo;
 }
-

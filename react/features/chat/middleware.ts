@@ -1,4 +1,3 @@
-import { AnyAction } from 'redux';
 import { v4 as uuidv4 } from 'uuid';
 
 import { IReduxState, IStore } from '../app/types';
@@ -10,7 +9,6 @@ import {
 } from '../base/conference/actionTypes';
 import { getCurrentConference } from '../base/conference/functions';
 import { IJitsiConference } from '../base/conference/reducer';
-import { openDialog } from '../base/dialog/actions';
 import i18next from '../base/i18n/i18next';
 import {
     JitsiConferenceErrors,
@@ -46,6 +44,7 @@ import {
     ADD_MESSAGE,
     CLOSE_CHAT,
     OPEN_CHAT,
+    SEND_BLOTTER_MESSAGE_STATUS,
     SEND_MESSAGE,
     SEND_MESSAGE_EDIT,
     SEND_MESSAGE_MODERATION,
@@ -57,17 +56,20 @@ import {
     addMessage,
     addMessageReaction,
     clearChatState,
-    closeChat,
     editMessage,
     moderateMessage,
     notifyPrivateRecipientsChanged,
     openChat,
     retractMessage,
     setMessageModerationSupported,
-    setPrivateMessageRecipient
+    setPrivateMessageRecipient,
+    updateBlotterMessageStatus
 } from './actions';
-import { ChatPrivacyDialog } from './components';
 import {
+    BLOTTER_MESSAGE_STATUS,
+    BLOTTER_STATUS_CLOSED,
+    BLOTTER_STATUS_OPEN,
+    BLOTTER_STATUS_TICKED,
     CHAR_LIMIT,
     ChatTabs,
     INCOMING_MSG_SOUND_ID,
@@ -90,14 +92,6 @@ import logger from './logger';
 import { INCOMING_MSG_SOUND_FILE } from './sounds';
 import './subscriber';
 import { IMessage } from './types';
-
-/**
- * Timeout for when to show the privacy notice after a private message was received.
- *
- * E.g. If this value is 20 secs (20000ms), then we show the privacy notice when sending a non private
- * message after we have received a private message in the last 20 seconds.
- */
-const PRIVACY_NOTICE_TIMEOUT = 20 * 1000;
 
 /**
  * Implements the middleware of the chat feature.
@@ -156,6 +150,29 @@ MiddlewareRegistry.register(store => next => action => {
     case ENDPOINT_MESSAGE_RECEIVED: {
         const state = store.getState();
         const { participant, data } = action;
+
+        if (data?.name === BLOTTER_MESSAGE_STATUS) {
+            const participantId = participant?.getId?.();
+            const message = state['features/chat'].messages.find(
+                (candidate: IMessage) => candidate.messageId === data.messageId);
+            const isTerminalStatus = data.status === BLOTTER_STATUS_TICKED
+                || data.status === BLOTTER_STATUS_CLOSED;
+
+            // Endpoint messages are untrusted. Only the original author can move
+            // their own still-open message into one of the two terminal states.
+            if (participantId
+                    && message
+                    && message.participantId === participantId
+                    && message.status === BLOTTER_STATUS_OPEN
+                    && !message.privateMessage
+                    && !message.lobbyChat
+                    && !message.isReaction
+                    && isTerminalStatus) {
+                dispatch(updateBlotterMessageStatus(data.messageId, data.status));
+            }
+
+            break;
+        }
 
         if (data?.type === MODERATE_CHAT_MESSAGE) {
             // Moderating a message is a moderator-only operation, and the authoritative
@@ -347,33 +364,11 @@ MiddlewareRegistry.register(store => next => action => {
         const conference = getCurrentConference(state);
 
         if (conference) {
-            // There may be cases when we intend to send a private message, but we forgot to set the
-            // recipient. This logic tries to mitigate this risk.
-            const shouldSendPrivateMessageTo = _shouldSendPrivateMessageTo(state, action);
-
-            if (shouldSendPrivateMessageTo) {
-                const participantExists = getParticipantById(state, shouldSendPrivateMessageTo.id);
-
-                if (participantExists || shouldSendPrivateMessageTo.isFromVisitor) {
-                    dispatch(openDialog('ChatPrivacyDialog', ChatPrivacyDialog, {
-                        message: action.message,
-                        participantID: shouldSendPrivateMessageTo.id,
-                        isFromVisitor: shouldSendPrivateMessageTo.isFromVisitor,
-                        displayName: shouldSendPrivateMessageTo.name
-                    }));
-
-                    // the dialog will take care of sending the message after user confirmation
-                    break;
-                }
-            }
-
-            // Sending the message if privacy notice doesn't need to be shown.
-
-            const { privateMessageRecipient, isLobbyChatActive, lobbyMessageRecipient }
+            const { isLobbyChatActive, lobbyMessageRecipient }
                 = state['features/chat'];
 
             if (typeof APP !== 'undefined') {
-                APP.API.notifySendingChatMessage(action.message, Boolean(privateMessageRecipient));
+                APP.API.notifySendingChatMessage(action.message, false);
             }
 
             if (isLobbyChatActive && lobbyMessageRecipient) {
@@ -385,17 +380,41 @@ MiddlewareRegistry.register(store => next => action => {
                     messageId
                 }, lobbyMessageRecipient.id);
                 _persistSentPrivateMessage(store, lobbyMessageRecipient, action.message, true, messageId);
-            } else if (privateMessageRecipient) {
-                const messageId = uuidv4();
-
-                conference.sendPrivateTextMessage(privateMessageRecipient.id, action.message, 'body', isVisitorChatParticipant(privateMessageRecipient), undefined, messageId);
-                _persistSentPrivateMessage(store, privateMessageRecipient, action.message, false, messageId);
             } else {
                 const messageId = uuidv4();
 
                 conference.sendTextMessage(action.message, undefined, undefined, messageId);
             }
         }
+        break;
+    }
+
+    case SEND_BLOTTER_MESSAGE_STATUS: {
+        const state = store.getState();
+        const conference = getCurrentConference(state);
+        const message = state['features/chat'].messages.find(
+            candidate => candidate.messageId === action.messageId);
+        const isTerminalStatus = action.status === BLOTTER_STATUS_TICKED
+            || action.status === BLOTTER_STATUS_CLOSED;
+
+        if (!conference
+                || !localParticipant?.id
+                || message?.participantId !== localParticipant.id
+                || message.status !== BLOTTER_STATUS_OPEN
+                || message.privateMessage
+                || message.lobbyChat
+                || message.isReaction
+                || !isTerminalStatus) {
+            logger.warn('Ignoring unauthorized or invalid Blotter message status transition.');
+            break;
+        }
+
+        conference.sendEndpointMessage('', {
+            name: BLOTTER_MESSAGE_STATUS,
+            messageId: action.messageId,
+            status: action.status
+        });
+        dispatch(updateBlotterMessageStatus(action.messageId, action.status));
         break;
     }
 
@@ -517,17 +536,15 @@ MiddlewareRegistry.register(store => next => action => {
  */
 StateListenerRegistry.register(
     state => getCurrentConference(state),
-    (conference, { dispatch, getState }, previousConference) => {
+    (conference, { dispatch }, previousConference) => {
         if (conference !== previousConference) {
-            // conference changed, left or failed...
-
-            if (getState()['features/chat'].isOpen) {
-                // Closes the chat if it's left open.
-                dispatch(closeChat());
+            if (previousConference) {
+                dispatch(clearChatState());
             }
 
-            // Clear chat messages.
-            dispatch(clearChatState());
+            if (conference) {
+                dispatch(openChat());
+            }
         }
     });
 
@@ -1033,76 +1050,4 @@ function _persistSentPrivateMessage({ dispatch, getState }: IStore, recipient: I
         sentToVisitor: recipient.isVisitor,
         timestamp: Date.now()
     }));
-}
-
-/**
- * Returns the participant info for who we may have wanted to send the message
- * that we're about to send.
- *
- * @param {Object} state - The Redux state.
- * @param {Object} action - The action being dispatched now.
- * @returns {IRecipient?} - The recipient info or undefined if no notice should be shown.
- */
-function _shouldSendPrivateMessageTo(state: IReduxState, action: AnyAction) {
-    if (action.ignorePrivacy) {
-        // Shortcut: this is only true, if we already displayed the notice, so no need to show it again.
-        return undefined;
-    }
-
-    const { messages, privateMessageRecipient } = state['features/chat'];
-
-    if (privateMessageRecipient) {
-        // We're already sending a private message, no need to warn about privacy.
-        return undefined;
-    }
-
-    if (!messages.length) {
-        // No messages yet, no need to warn for privacy.
-        return undefined;
-    }
-
-    // Platforms sort messages differently
-    const lastMessage = navigator.product === 'ReactNative'
-        ? messages[0] : messages[messages.length - 1];
-
-    if (lastMessage.messageType === MESSAGE_TYPE_LOCAL) {
-        // The sender is probably aware of any private messages as already sent
-        // a message since then. Doesn't make sense to display the notice now.
-        return undefined;
-    }
-
-    if (lastMessage.privateMessage) {
-        if (!lastMessage.participantId) {
-            // this is a system message we can ignore
-            return undefined;
-        }
-
-        // We show the notice if the last received message was private.
-        return {
-            id: lastMessage.participantId,
-            isFromVisitor: Boolean(lastMessage.isFromVisitor),
-            name: lastMessage.displayName
-        };
-    }
-
-    // But messages may come rapidly, we want to protect our users from mis-sending a message
-    // even when there was a reasonable recently received private message.
-    const now = Date.now();
-    const recentPrivateMessages = messages.filter(
-        message =>
-            message.messageType !== MESSAGE_TYPE_LOCAL
-            && message.privateMessage
-            && message.timestamp + PRIVACY_NOTICE_TIMEOUT > now);
-    const recentPrivateMessage = navigator.product === 'ReactNative'
-        ? recentPrivateMessages[0] : recentPrivateMessages[recentPrivateMessages.length - 1];
-
-    if (recentPrivateMessage) {
-        return {
-            id: recentPrivateMessage.participantId,
-            isFromVisitor: Boolean(recentPrivateMessage.isFromVisitor),
-            name: recentPrivateMessage.displayName
-        };
-    }
-
-    return undefined;
 }

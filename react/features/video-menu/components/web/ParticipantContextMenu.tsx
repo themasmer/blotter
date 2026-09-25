@@ -11,7 +11,7 @@ import Avatar from '../../../base/avatar/components/Avatar';
 import { isIosMobileBrowser, isMobileBrowser } from '../../../base/environment/utils';
 import { MEDIA_TYPE } from '../../../base/media/constants';
 import { PARTICIPANT_ROLE } from '../../../base/participants/constants';
-import { getLocalParticipant, hasRaisedHand, isPrivateChatEnabled } from '../../../base/participants/functions';
+import { getLocalParticipant, hasRaisedHand } from '../../../base/participants/functions';
 import { IParticipant } from '../../../base/participants/types';
 import { isParticipantAudioMuted } from '../../../base/tracks/functions.any';
 import ContextMenu from '../../../base/ui/components/web/ContextMenu';
@@ -43,7 +43,6 @@ import MuteEveryoneElseButton from './MuteEveryoneElseButton';
 import MuteEveryoneElsesDesktopButton from './MuteEveryoneElsesDesktopButton';
 import MuteEveryoneElsesVideoButton from './MuteEveryoneElsesVideoButton';
 import MuteVideoButton from './MuteVideoButton';
-import PrivateMessageMenuButton from './PrivateMessageMenuButton';
 import RemoteControlButton, { REMOTE_CONTROL_MENU_STATES } from './RemoteControlButton';
 import SendToRoomButton from './SendToRoomButton';
 import TogglePinToStageButton from './TogglePinToStageButton';
@@ -160,7 +159,6 @@ const ParticipantContextMenu = ({
     const stageFilmstrip = useSelector(isStageFilmstripAvailable);
     const shouldDisplayVerification = useSelector((state: IReduxState) => displayVerification(state, participant?.id));
     const buttonsWithNotifyClick = useSelector(getParticipantMenuButtonsWithNotifyClick);
-    const enablePrivateChat = useSelector((state: IReduxState) => isPrivateChatEnabled(participant, state));
 
     const _currentRoomId = useSelector(getCurrentRoomId);
     const _rooms: IRoom[] = Object.values(useSelector(getBreakoutRooms));
@@ -303,10 +301,6 @@ const ParticipantContextMenu = ({
             { ...getButtonProps(BUTTONS.SEND_TO_SECOND_SCREEN) }
             source = { secondScreenSource } />
     );
-
-    if (enablePrivateChat) {
-        buttons2.push(<PrivateMessageMenuButton { ...getButtonProps(BUTTONS.PRIVATE_MESSAGE) } />);
-    }
 
     if (thumbnailMenu && isMobileBrowser()) {
         buttons2.push(<ConnectionStatusButton { ...getButtonProps(BUTTONS.CONN_STATUS) } />);

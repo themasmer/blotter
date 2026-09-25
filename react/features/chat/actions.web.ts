@@ -1,5 +1,3 @@
-// @ts-expect-error
-import VideoLayout from '../../../modules/UI/videolayout/VideoLayout';
 import { IStore } from '../app/types';
 
 import {
@@ -8,7 +6,7 @@ import {
     SET_CHAT_WIDTH,
     SET_USER_CHAT_WIDTH
 } from './actionTypes';
-import { closeChat, setFocusedTab } from './actions.any';
+import { setFocusedTab } from './actions.any';
 import { ChatTabs } from './constants';
 
 export * from './actions.any';
@@ -16,18 +14,17 @@ export * from './actions.any';
 /**
  * Displays the chat panel with the CHAT tab active.
  *
- * @param {Object} participant - The recipient for the private chat.
+ * @param {Object} _participant - Ignored legacy private-chat recipient.
  * @param {Object} _disablePolls - Used on native.
  * @returns {{
  *     participant: Participant,
  *     type: OPEN_CHAT
  * }}
  */
-export function openChat(participant?: Object, _disablePolls?: boolean) {
+export function openChat(_participant?: Object, _disablePolls?: boolean) {
     return function(dispatch: IStore['dispatch']) {
         dispatch(setFocusedTab(ChatTabs.CHAT));
         dispatch({
-            participant,
             type: OPEN_CHAT
         });
     };
@@ -39,18 +36,7 @@ export function openChat(participant?: Object, _disablePolls?: boolean) {
  * @returns {Function}
  */
 export function toggleChat() {
-    return (dispatch: IStore['dispatch'], getState: IStore['getState']) => {
-        const isOpen = getState()['features/chat'].isOpen;
-
-        if (isOpen) {
-            dispatch(closeChat());
-        } else {
-            dispatch(openChat());
-        }
-
-        // Recompute the large video size whenever we toggle the chat, as it takes chat state into account.
-        VideoLayout.onResize();
-    };
+    return (dispatch: IStore['dispatch']) => dispatch(openChat());
 }
 
 /**

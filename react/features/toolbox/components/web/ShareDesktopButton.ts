@@ -73,7 +73,7 @@ class ShareDesktopButton extends AbstractButton<IProps> {
      * @returns {boolean}
      */
     override _isDisabled() {
-        return !this.props._desktopSharingEnabled;
+        return true;
     }
 
     /**
@@ -109,7 +109,7 @@ const mapStateToProps = (state: IReduxState) => {
     return {
         _desktopSharingEnabled: desktopSharingEnabled,
         _screensharing: isScreenVideoShared(state),
-        visible: JitsiMeetJS.isDesktopSharingEnabled()
+        visible: true
     };
 };
 

@@ -125,10 +125,22 @@
         "enter": "Enter room",
         "error": "Error: your message was not sent. Reason: {{error}}",
         "everyone": "Everyone",
+        "dictation": {
+            "failed": "Dictation could not be started. Please try again.",
+            "holdToTalk": "Hold to dictate",
+            "permissionDenied": "Microphone permission is required for dictation.",
+            "unsupported": "Dictation is not supported by this browser."
+        },
         "fieldPlaceHolder": "Aa",
         "fileAccessibleTitle": "{{user}} uploaded a file",
         "fileAccessibleTitleMe": "me uploaded a file",
         "fileDeleted": "A file was deleted",
+        "filter": {
+            "all": "All",
+            "label": "Filter Blotter messages",
+            "mine": "Mine",
+            "mineEmpty": "You have not sent a message yet."
+        },
         "guestsChatIndicator": "(guest)",
         "lobbyChatMessageTo": "Lobby chat message to {{recipient}}",
         "message": "Message",
@@ -168,6 +180,10 @@
         },
         "sendButton": "Send",
         "smileysPanel": "Emoji panel",
+        "status": {
+            "close": "Close message",
+            "tick": "Tick message"
+        },
         "systemDisplayName": "System",
         "tabs": {
             "chat": "Chat",
@@ -175,7 +191,7 @@
             "fileSharing": "Files",
             "polls": "Polls"
         },
-        "title": "Chat",
+        "title": "Blotter",
         "titleWithCC": "CC",
         "titleWithFeatures": "Chat and",
         "titleWithFileSharing": "Files",

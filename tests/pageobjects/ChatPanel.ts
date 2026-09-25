@@ -11,27 +11,79 @@ export default class ChatPanel extends BasePageObject {
         return this.participant.driver.$('#sideToolbarContainer').isExisting();
     }
 
-    /**
-     * Presses the "chat" keyboard shortcut which opens or closes the chat
-     * panel.
-     */
-    async pressShortcut() {
-        await this.participant.driver.$('body').click();
-        await this.participant.driver.keys([ 'c' ]);
-    }
-
     async sendMessage(message: string) {
         if (!await this.isOpen()) {
-            await this.pressShortcut();
-        }
-        if (!await this.isOpen()) {
-            throw new Error('Chat panel failed to open');
+            throw new Error('Permanent Blotter panel is not open');
         }
 
-        const inputField = this.participant.driver.$('#chat-input');
+        const inputField = this.participant.driver.$('#chat-input-messagebox');
 
         await inputField.click();
         await this.participant.driver.keys(`${message}\n`);
+    }
+
+    async getMessage(message: string) {
+        const messages = await this.participant.driver.$$('.chatmessage-wrapper');
+
+        for (const element of messages) {
+            if ((await element.getText()).includes(message)) {
+                return element;
+            }
+        }
+
+        throw new Error(`Blotter message not found: ${message}`);
+    }
+
+    async waitForMessage(message: string) {
+        await this.participant.driver.waitUntil(async () => {
+            try {
+                await this.getMessage(message);
+
+                return true;
+            } catch {
+                return false;
+            }
+        }, {
+            timeout: 5_000,
+            timeoutMsg: `Blotter message did not arrive: ${message}`
+        });
+    }
+
+    async getMessageStatus(message: string) {
+        return (await this.getMessage(message)).getAttribute('data-blotter-status');
+    }
+
+    async getMessageAppearance(message: string) {
+        const element = await this.getMessage(message);
+        const bubble = element.$('.chatmessage');
+        const text = element.$('.usermessage');
+
+        return {
+            backgroundColor: (await bubble.getCSSProperty('background-color')).value,
+            textDecoration: (await text.getCSSProperty('text-decoration-line')).value
+        };
+    }
+
+    async hasStatusControl(message: string, control: 'tick' | 'close') {
+        const element = await this.getMessage(message);
+        const messageId = await element.getAttribute('id');
+
+        return element.$(`[data-testid="blotter-${control}-${messageId}"]`).isExisting();
+    }
+
+    async clickStatusControl(message: string, control: 'tick' | 'close') {
+        const element = await this.getMessage(message);
+        const messageId = await element.getAttribute('id');
+
+        await element.$(`[data-testid="blotter-${control}-${messageId}"]`).click();
+    }
+
+    async selectFilter(filter: 'all' | 'mine') {
+        await this.participant.driver.$(`[data-testid="blotter-filter-${filter}"]`).click();
+    }
+
+    async getVisibleMessageCount() {
+        return (await this.participant.driver.$$('.chatmessage-wrapper')).length;
     }
 
     /**

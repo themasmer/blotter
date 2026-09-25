@@ -1,50 +1,71 @@
 import { Theme } from '@mui/material';
 import React, { Component, RefObject } from 'react';
 import { WithTranslation } from 'react-i18next';
-import { connect } from 'react-redux';
 import { withStyles } from 'tss-react/mui';
 
-import { IReduxState, IStore } from '../../../app/types';
 import { isMobileBrowser } from '../../../base/environment/utils';
 import { translate } from '../../../base/i18n/functions';
-import { IconFaceSmile, IconSend } from '../../../base/icons/svg';
+import Icon from '../../../base/icons/components/Icon';
+import { IconMic, IconSend } from '../../../base/icons/svg';
 import Button from '../../../base/ui/components/web/Button';
 import Input from '../../../base/ui/components/web/Input';
-import { CHAR_LIMIT, CHAT_SIZE } from '../../constants';
-import { areSmileysDisabled, isSendGroupChatDisabled } from '../../functions';
+import { CHAR_LIMIT } from '../../constants';
 import { IMessage } from '../../types';
 
-import SmileysPanel from './SmileysPanel';
 
-
-const styles = (_theme: Theme, { _chatWidth }: IProps) => {
+const styles = (_theme: Theme) => {
     return {
-        smileysPanel: {
-            bottom: '100%',
-            boxSizing: 'border-box' as const,
-            backgroundColor: 'rgba(0, 0, 0, .6) !important',
-            height: 'auto',
-            display: 'flex' as const,
-            overflow: 'hidden',
-            position: 'absolute' as const,
-            width: `${_chatWidth - 32}px`,
-            marginBottom: '5px',
-            marginLeft: '-5px',
-            transition: 'max-height 0.3s',
+        dictationButton: {
+            alignItems: 'center',
+            backgroundColor: _theme.palette.action02,
+            border: 0,
+            borderRadius: _theme.shape.borderRadius,
+            cursor: 'pointer',
+            display: 'flex',
+            justifyContent: 'center',
+            marginRight: _theme.spacing(2),
+            padding: _theme.spacing(2),
 
-            '& #smileysContainer': {
-                backgroundColor: '#131519',
-                borderTop: '1px solid #A4B8D1'
+            '&:disabled': {
+                cursor: 'not-allowed',
+                opacity: 0.5
             }
         },
-        chatDisabled: {
-            borderTop: `1px solid ${_theme.palette.chatInputBorder}`,
-            boxSizing: 'border-box' as const,
-            padding: _theme.spacing(4),
-            textAlign: 'center' as const,
+        dictating: {
+            backgroundColor: _theme.palette.actionDanger
+        },
+        speechError: {
+            color: _theme.palette.textError,
+            marginTop: _theme.spacing(2),
+            ..._theme.typography.labelRegular
         }
     };
 };
+
+interface ISpeechRecognitionResultEvent {
+    results: ArrayLike<{
+        0: { transcript: string; };
+        isFinal: boolean;
+    }>;
+}
+
+interface ISpeechRecognitionErrorEvent {
+    error: string;
+}
+
+interface ISpeechRecognition {
+    abort: () => void;
+    continuous: boolean;
+    interimResults: boolean;
+    lang: string;
+    onend: (() => void) | null;
+    onerror: ((event: ISpeechRecognitionErrorEvent) => void) | null;
+    onresult: ((event: ISpeechRecognitionResultEvent) => void) | null;
+    start: () => void;
+    stop: () => void;
+}
+
+type SpeechRecognitionConstructor = new () => ISpeechRecognition;
 
 /**
  * The type of the React {@code Component} props of {@link ChatInput}.
@@ -52,32 +73,9 @@ const styles = (_theme: Theme, { _chatWidth }: IProps) => {
 interface IProps extends WithTranslation {
 
     /**
-     * Whether chat emoticons are disabled.
-     */
-    _areSmileysDisabled: boolean;
-
-
-    _chatWidth: number;
-
-    /**
-     * Whether sending group chat messages is disabled.
-     */
-    _isSendGroupChatDisabled: boolean;
-
-    /**
-     * The id of the message recipient, if any.
-     */
-    _privateMessageRecipientId?: string;
-
-    /**
      * An object containing the CSS classes.
      */
     classes?: Partial<Record<keyof ReturnType<typeof styles>, string>>;
-
-    /**
-     * Invoked to send chat messages.
-     */
-    dispatch: IStore['dispatch'];
 
     /**
      * The message currently being edited, if any.
@@ -100,15 +98,14 @@ interface IProps extends WithTranslation {
  */
 interface IState {
 
+    isDictating: boolean;
+
     /**
      * User provided nickname when the input text is provided in the view.
      */
     message: string;
 
-    /**
-     * Whether or not the smiley selector is visible.
-     */
-    showSmileysPanel: boolean;
+    speechError?: string;
 }
 
 /**
@@ -117,11 +114,14 @@ interface IState {
  * @augments Component
  */
 class ChatInput extends Component<IProps, IState> {
+    _dictationBase = '';
+    _recognition?: ISpeechRecognition;
     _textArea?: RefObject<HTMLTextAreaElement>;
 
-    override state = {
+    override state: IState = {
+        isDictating: false,
         message: '',
-        showSmileysPanel: false
+        speechError: undefined
     };
 
     /**
@@ -137,10 +137,13 @@ class ChatInput extends Component<IProps, IState> {
 
         // Bind event handlers so they are only bound once for every instance.
         this._onDetectSubmit = this._onDetectSubmit.bind(this);
+        this._onDictationKeyDown = this._onDictationKeyDown.bind(this);
+        this._onDictationKeyUp = this._onDictationKeyUp.bind(this);
+        this._onDictationPointerDown = this._onDictationPointerDown.bind(this);
         this._onMessageChange = this._onMessageChange.bind(this);
-        this._onSmileySelect = this._onSmileySelect.bind(this);
         this._onSubmitMessage = this._onSubmitMessage.bind(this);
-        this._toggleSmileysPanel = this._toggleSmileysPanel.bind(this);
+        this._startDictation = this._startDictation.bind(this);
+        this._onStopDictation = this._onStopDictation.bind(this);
     }
 
     /**
@@ -155,6 +158,22 @@ class ChatInput extends Component<IProps, IState> {
         } else {
             this._focus();
         }
+
+        window.addEventListener('pointerup', this._onStopDictation);
+        window.addEventListener('pointercancel', this._onStopDictation);
+        window.addEventListener('blur', this._onStopDictation);
+    }
+
+    override componentWillUnmount() {
+        window.removeEventListener('pointerup', this._onStopDictation);
+        window.removeEventListener('pointercancel', this._onStopDictation);
+        window.removeEventListener('blur', this._onStopDictation);
+        if (this._recognition) {
+            this._recognition.onend = null;
+            this._recognition.onerror = null;
+            this._recognition.onresult = null;
+            this._recognition.abort();
+        }
     }
 
     /**
@@ -163,9 +182,6 @@ class ChatInput extends Component<IProps, IState> {
      * @inheritdoc
      */
     override componentDidUpdate(prevProps: Readonly<IProps>) {
-        if (prevProps._privateMessageRecipientId !== this.props._privateMessageRecipientId) {
-            this._textArea?.current?.focus();
-        }
         if (prevProps.editingMessage?.messageId !== this.props.editingMessage?.messageId) {
             this.setState({
                 message: this.props.editingMessage?.message ?? ''
@@ -182,33 +198,13 @@ class ChatInput extends Component<IProps, IState> {
      */
     override render() {
         const classes = withStyles.getClasses(this.props);
-        const hideInput = this.props._isSendGroupChatDisabled && !this.props._privateMessageRecipientId;
-
-        if (hideInput) {
-            return (
-                <div className = { classes.chatDisabled }>
-                    {this.props.t('chat.disabled')}
-                </div>
-            );
-        }
+        const speechRecognitionSupported = Boolean(this._getSpeechRecognitionConstructor());
 
         return (
             <div className = { `chat-input-container${this.state.message.trim().length ? ' populated' : ''}` }>
                 <div id = 'chat-input' >
-                    {!this.props._areSmileysDisabled && this.state.showSmileysPanel && (
-                        <div
-                            className = 'smiley-input'>
-                            <div
-                                className = { classes.smileysPanel } >
-                                <SmileysPanel
-                                    onSmileySelect = { this._onSmileySelect } />
-                            </div>
-                        </div>
-                    )}
                     <Input
                         className = 'chat-input'
-                        icon = { this.props._areSmileysDisabled ? undefined : IconFaceSmile }
-                        iconClick = { this._toggleSmileysPanel }
                         id = 'chat-input-messagebox'
                         maxRows = { 5 }
                         onChange = { this._onMessageChange }
@@ -217,6 +213,19 @@ class ChatInput extends Component<IProps, IState> {
                         ref = { this._textArea }
                         textarea = { true }
                         value = { this.state.message } />
+                    <button
+                        aria-label = { this.props.t('chat.dictation.holdToTalk') }
+                        aria-pressed = { this.state.isDictating }
+                        className = { `${classes.dictationButton} ${this.state.isDictating ? classes.dictating : ''}` }
+                        data-testid = 'blotter-dictation'
+                        disabled = { !speechRecognitionSupported }
+                        onBlur = { this._onStopDictation }
+                        onKeyDown = { this._onDictationKeyDown }
+                        onKeyUp = { this._onDictationKeyUp }
+                        onPointerDown = { this._onDictationPointerDown }
+                        type = 'button'>
+                        <Icon src = { IconMic } />
+                    </button>
                     <Button
                         accessibilityLabel = { this.props.t('chat.sendButton') }
                         disabled = { !this.state.message.trim() }
@@ -224,6 +233,13 @@ class ChatInput extends Component<IProps, IState> {
                         onClick = { this._onSubmitMessage }
                         size = { isMobileBrowser() ? 'large' : 'medium' } />
                 </div>
+                {(!speechRecognitionSupported || this.state.speechError) && (
+                    <div
+                        className = { classes.speechError }
+                        role = 'alert'>
+                        {this.state.speechError || this.props.t('chat.dictation.unsupported')}
+                    </div>
+                )}
             </div>
         );
     }
@@ -244,15 +260,7 @@ class ChatInput extends Component<IProps, IState> {
      * @returns {void}
      */
     _onSubmitMessage() {
-        const {
-            _isSendGroupChatDisabled,
-            _privateMessageRecipientId,
-            onSend
-        } = this.props;
-
-        if (_isSendGroupChatDisabled && !_privateMessageRecipientId) {
-            return;
-        }
+        const { onSend } = this.props;
 
         const trimmed = this.state.message.trim().slice(0, CHAR_LIMIT);
 
@@ -264,8 +272,6 @@ class ChatInput extends Component<IProps, IState> {
             // Keep the textarea in focus when sending messages via submit button.
             this._focus();
 
-            // Hide the Emojis box after submitting the message
-            this.setState({ showSmileysPanel: false });
         }
 
     }
@@ -322,62 +328,104 @@ class ChatInput extends Component<IProps, IState> {
         this.setState({ message: value.slice(0, CHAR_LIMIT) });
     }
 
-    /**
-     * Appends a selected smileys to the chat message draft.
-     *
-     * @param {string} smileyText - The value of the smiley to append to the
-     * chat message.
-     * @private
-     * @returns {void}
-     */
-    _onSmileySelect(smileyText: string) {
-        if (smileyText) {
-            this.setState({
-                message: `${this.state.message} ${smileyText}`,
-                showSmileysPanel: false
-            });
-        } else {
-            this.setState({
-                showSmileysPanel: false
-            });
-        }
+    _getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | undefined {
+        const speechWindow = window as typeof window & {
+            SpeechRecognition?: SpeechRecognitionConstructor;
+            webkitSpeechRecognition?: SpeechRecognitionConstructor;
+        };
 
-        this._focus();
+        return speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
     }
 
-    /**
-     * Callback invoked to hide or show the smileys selector.
-     *
-     * @private
-     * @returns {void}
-     */
-    _toggleSmileysPanel() {
-        if (this.state.showSmileysPanel) {
-            this._focus();
+    _startDictation() {
+        if (this.state.isDictating) {
+            return;
         }
-        this.setState({ showSmileysPanel: !this.state.showSmileysPanel });
+
+        const Recognition = this._getSpeechRecognitionConstructor();
+
+        if (!Recognition) {
+            this.setState({ speechError: this.props.t('chat.dictation.unsupported') });
+
+            return;
+        }
+
+        if (!this._recognition) {
+            this._recognition = new Recognition();
+            this._recognition.continuous = true;
+            this._recognition.interimResults = true;
+            this._recognition.lang = document.documentElement.lang || navigator.language;
+            this._recognition.onresult = event => {
+                let transcript = '';
+
+                for (let index = 0; index < event.results.length; index++) {
+                    transcript += event.results[index][0].transcript;
+                }
+
+                const separator = this._dictationBase && transcript ? ' ' : '';
+
+                this.setState({
+                    message: `${this._dictationBase}${separator}${transcript}`.slice(0, CHAR_LIMIT)
+                });
+            };
+            this._recognition.onerror = event => {
+                const speechError = event.error === 'not-allowed' || event.error === 'service-not-allowed'
+                    ? this.props.t('chat.dictation.permissionDenied')
+                    : this.props.t('chat.dictation.failed');
+
+                this.setState({
+                    isDictating: false,
+                    speechError
+                });
+            };
+            this._recognition.onend = () => this.setState({ isDictating: false });
+        }
+
+        this._dictationBase = this.state.message;
+        this.setState({
+            isDictating: true,
+            speechError: undefined
+        });
+
+        try {
+            this._recognition?.start();
+        } catch {
+            this.setState({
+                isDictating: false,
+                speechError: this.props.t('chat.dictation.failed')
+            });
+        }
+    }
+
+    _onStopDictation() {
+        if (!this.state.isDictating) {
+            return;
+        }
+
+        this._recognition?.stop();
+        this.setState({ isDictating: false });
+    }
+
+    _onDictationPointerDown(event: React.PointerEvent<HTMLButtonElement>) {
+        if (event.button === 0) {
+            event.preventDefault();
+            this._startDictation();
+        }
+    }
+
+    _onDictationKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
+        if ((event.key === 'Enter' || event.key === ' ') && !event.repeat) {
+            event.preventDefault();
+            this._startDictation();
+        }
+    }
+
+    _onDictationKeyUp(event: React.KeyboardEvent<HTMLButtonElement>) {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            this._onStopDictation();
+        }
     }
 }
 
-/**
- * Function that maps parts of Redux state tree into component props.
- *
- * @param {Object} state - Redux state.
- * @private
- * @returns {{
- *     _areSmileysDisabled: boolean
- * }}
- */
-const mapStateToProps = (state: IReduxState) => {
-    const { privateMessageRecipient, width } = state['features/chat'];
-    const isGroupChatDisabled = isSendGroupChatDisabled(state);
-
-    return {
-        _areSmileysDisabled: areSmileysDisabled(state),
-        _privateMessageRecipientId: privateMessageRecipient?.id,
-        _isSendGroupChatDisabled: isGroupChatDisabled,
-        _chatWidth: width.current ?? CHAT_SIZE,
-    };
-};
-
-export default translate(connect(mapStateToProps)(withStyles(ChatInput, styles)));
+export default translate(withStyles(ChatInput, styles));

@@ -111,6 +111,20 @@ export default class Toolbar extends BasePageObject {
     }
 
     /**
+     * Returns whether a toolbar entry is present and disabled, including overflow entries.
+     */
+    async isButtonDisabled(accessibilityLabel: string): Promise<boolean> {
+        await this.openOverflowMenu();
+
+        const button = this.getButton(accessibilityLabel);
+        const disabled = await button.isExisting() && !(await button.isEnabled());
+
+        await this.closeOverflowMenu();
+
+        return disabled;
+    }
+
+    /**
      * Clicks audio mute button.
      *
      * @returns {Promise<void>}

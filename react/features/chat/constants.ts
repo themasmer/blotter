@@ -77,6 +77,20 @@ export const OPTION_GROUPCHAT = 'groupchat';
 
 export const MODERATE_CHAT_MESSAGE = 'MODERATE_CHAT_MESSAGE';
 
+/**
+ * Endpoint-message name used to synchronize Blotter message status changes.
+ */
+export const BLOTTER_MESSAGE_STATUS = 'BLOTTER_MESSAGE_STATUS';
+
+export const BLOTTER_STATUS_OPEN = 'open' as const;
+export const BLOTTER_STATUS_TICKED = 'ticked' as const;
+export const BLOTTER_STATUS_CLOSED = 'closed' as const;
+
+export type BlotterMessageStatus =
+    | typeof BLOTTER_STATUS_OPEN
+    | typeof BLOTTER_STATUS_TICKED
+    | typeof BLOTTER_STATUS_CLOSED;
+
 
 /**
  * Maximum number of pending edits are allowed.

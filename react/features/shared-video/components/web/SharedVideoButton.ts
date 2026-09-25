@@ -3,17 +3,11 @@ import { connect } from 'react-redux';
 import { IReduxState } from '../../../app/types';
 import { translate } from '../../../base/i18n/functions';
 import { IconPlay } from '../../../base/icons/svg';
-import { getLocalParticipant } from '../../../base/participants/functions';
 import AbstractButton, { IProps as AbstractButtonProps } from '../../../base/toolbox/components/AbstractButton';
 import { toggleSharedVideo } from '../../actions';
 import { isSharingStatus } from '../../functions';
 
 interface IProps extends AbstractButtonProps {
-
-    /**
-     * Whether or not the button is disabled.
-     */
-    _isDisabled: boolean;
 
     /**
      * Whether or not the local participant is sharing a video.
@@ -62,7 +56,7 @@ class SharedVideoButton extends AbstractButton<IProps> {
      * @returns {boolean}
      */
     override _isDisabled() {
-        return this.props._isDisabled;
+        return true;
     }
 
     /**
@@ -84,12 +78,10 @@ class SharedVideoButton extends AbstractButton<IProps> {
  * @returns {IProps}
  */
 function _mapStateToProps(state: IReduxState) {
-    const { ownerId, status: sharedVideoStatus } = state['features/shared-video'];
-    const localParticipantId = getLocalParticipant(state)?.id;
+    const { status: sharedVideoStatus } = state['features/shared-video'];
     const isSharing = isSharingStatus(sharedVideoStatus ?? '');
 
     return {
-        _isDisabled: isSharing && ownerId !== localParticipantId,
         _sharingVideo: isSharing
     };
 }

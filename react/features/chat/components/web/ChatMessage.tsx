@@ -1,15 +1,22 @@
 import { Theme } from '@mui/material';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { connect } from 'react-redux';
+import { connect, useDispatch } from 'react-redux';
 import { makeStyles } from 'tss-react/mui';
 
 import { IReduxState } from '../../../app/types';
 import { translate } from '../../../base/i18n/functions';
-import { getParticipantById, getParticipantDisplayName, isPrivateChatEnabled } from '../../../base/participants/functions';
+import { IconCheck, IconCloseLarge } from '../../../base/icons/svg';
+import { getParticipantDisplayName } from '../../../base/participants/functions';
 import Popover from '../../../base/popover/components/Popover.web';
 import Message from '../../../base/react/components/web/Message';
-import { MESSAGE_TYPE_LOCAL } from '../../constants';
-// AFTER
+import Button from '../../../base/ui/components/web/Button';
+import { sendBlotterMessageStatus } from '../../actions.any';
+import {
+    BLOTTER_STATUS_CLOSED,
+    BLOTTER_STATUS_OPEN,
+    BLOTTER_STATUS_TICKED,
+    MESSAGE_TYPE_LOCAL
+} from '../../constants';
 import { getActiveChatSearchMatch, getChatSearchQuery, getDisplayNameSuffix, getFormattedTimestamp, getMessageText, getPrivateNoticeMessage, isFileMessage } from '../../functions';
 import { IChatMessageProps } from '../../types';
 
@@ -19,7 +26,6 @@ import ReactButton from './ReactButton';
 
 interface IProps extends IChatMessageProps {
     className?: string;
-    enablePrivateChat?: boolean;
     isActiveSearchMatch?: boolean;
     isEditing?: boolean;
     onCancelEdit?: () => void;
@@ -108,6 +114,26 @@ const useStyles = makeStyles()((theme: Theme) => {
             '&.lobbymessage': {
                 backgroundColor: theme.palette.chatMessagePrivate
             }
+        },
+        openMessage: {
+            backgroundColor: '#1b5e20 !important'
+        },
+        tickedMessage: {
+            backgroundColor: '#b71c1c !important'
+        },
+        closedMessage: {
+            backgroundColor: '#e65100 !important'
+        },
+        terminalMessageText: {
+            textDecoration: 'line-through'
+        },
+        statusControls: {
+            display: 'flex',
+            gap: theme.spacing(1),
+            marginTop: theme.spacing(1)
+        },
+        statusButton: {
+            padding: theme.spacing(1)
         },
         searchMatchActive: {
             outline: `2px solid ${theme.palette.action01}`,
@@ -267,13 +293,13 @@ const ChatMessage = ({
     shouldDisplayMenuOnRight,
     isActiveSearchMatch,
     searchQuery,
-    enablePrivateChat,
     knocking,
     onCancelEdit,
     onEditMessage,
     t
 }: IProps) => {
     const { classes, cx } = useStyles();
+    const dispatch = useDispatch();
     const [ isHovered, setIsHovered ] = useState(false);
     const [ isReactionsOpen, setIsReactionsOpen ] = useState(false);
     const messageRef = useRef<HTMLDivElement>(null);
@@ -307,6 +333,14 @@ const ChatMessage = ({
     const handleEditMessage = useCallback(() => {
         onEditMessage?.(message);
     }, [ message, onEditMessage ]);
+
+    const handleCloseMessage = useCallback(() => {
+        dispatch(sendBlotterMessageStatus(message.messageId, BLOTTER_STATUS_CLOSED));
+    }, [ dispatch, message.messageId ]);
+
+    const handleTickMessage = useCallback(() => {
+        dispatch(sendBlotterMessageStatus(message.messageId, BLOTTER_STATUS_TICKED));
+    }, [ dispatch, message.messageId ]);
 
     const handleMouseEnter = useCallback(() => {
         setIsHovered(true);
@@ -468,10 +502,22 @@ const ChatMessage = ({
         && !message.isReaction
         && !message.isFromVisitor
         && !isFileMessage(message);
+    const isBlotterMessage = !message.privateMessage
+        && !message.lobbyChat
+        && !message.isReaction
+        && !isFileMessage(message);
+    const canSetStatus = isBlotterMessage
+        && message.messageType === MESSAGE_TYPE_LOCAL
+        && Boolean(message.messageId)
+        && message.status === BLOTTER_STATUS_OPEN
+        && !message.isDeleted
+        && !message.isModerated;
 
     return (
         <div
-            className = { cx(classes.chatMessageWrapper, className) }
+            className = { cx('chatmessage-wrapper', classes.chatMessageWrapper, className) }
+            data-blotter-author = { message.messageType === MESSAGE_TYPE_LOCAL ? 'local' : 'remote' }
+            data-blotter-status = { isBlotterMessage ? message.status : undefined }
             id = { message.messageId }
             onMouseEnter = { handleMouseEnter }
             onMouseLeave = { handleMouseLeave }
@@ -482,7 +528,7 @@ const ChatMessage = ({
                         {isHovered && !message.isModerated && <MessageMenu
                             canEdit = { canEdit }
                             displayName = { message.displayName }
-                            enablePrivateChat = { Boolean(enablePrivateChat) }
+                            enablePrivateChat = { false }
                             isFileMessage = { isFileMessage(message) }
                             isFromVisitor = { message.isFromVisitor }
                             isLobbyMessage = { message.lobbyChat }
@@ -500,13 +546,24 @@ const ChatMessage = ({
                         message.privateMessage && 'privatemessage',
                         message.lobbyChat && !knocking && 'lobbymessage',
                         isFileMessage(message) && 'file',
+                        isBlotterMessage && message.status === BLOTTER_STATUS_OPEN && classes.openMessage,
+                        isBlotterMessage && message.status === BLOTTER_STATUS_TICKED && classes.tickedMessage,
+                        isBlotterMessage && message.status === BLOTTER_STATUS_CLOSED && classes.closedMessage,
                         isActiveSearchMatch && classes.searchMatchActive
                     ) }
                     ref = { messageRef }>
                     <div className = { classes.replyWrapper }>
                         <div className = { cx('messagecontent', classes.messageContent) }>
                             {showDisplayName && _renderDisplayName()}
-                            <div className = { cx('usermessage', classes.userMessage, message.isDeleted && message.isModerated && classes.deletedMessage) }>
+                            <div
+                                className = { cx(
+                                    'usermessage',
+                                    classes.userMessage,
+                                    message.isDeleted && message.isModerated && classes.deletedMessage,
+                                    isBlotterMessage
+                                        && message.status !== BLOTTER_STATUS_OPEN
+                                        && classes.terminalMessageText
+                                ) }>
                                 {!message.isModerated && isFileMessage(message) ? (
                                     <FileMessage
                                         message = { message }
@@ -551,6 +608,22 @@ const ChatMessage = ({
                                     )}
                                     {_renderTimestamp()}
                                 </div>
+                                {canSetStatus && (
+                                    <div className = { classes.statusControls }>
+                                        <Button
+                                            accessibilityLabel = { t('chat.status.tick') }
+                                            className = { classes.statusButton }
+                                            icon = { IconCheck }
+                                            onClick = { handleTickMessage }
+                                            testId = { `blotter-tick-${message.messageId}` } />
+                                        <Button
+                                            accessibilityLabel = { t('chat.status.close') }
+                                            className = { classes.statusButton }
+                                            icon = { IconCloseLarge }
+                                            onClick = { handleCloseMessage }
+                                            testId = { `blotter-close-${message.messageId}` } />
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -570,7 +643,7 @@ const ChatMessage = ({
                                 {isHovered && !message.isDeleted && !message.isModerated && <MessageMenu
                                     canEdit = { canEdit }
                                     displayName = { message.displayName }
-                                    enablePrivateChat = { Boolean(enablePrivateChat) }
+                                    enablePrivateChat = { false }
                                     isFileMessage = { isFileMessage(message) }
                                     isFromVisitor = { message.isFromVisitor }
                                     isLobbyMessage = { message.lobbyChat }
@@ -600,24 +673,12 @@ function _mapStateToProps(state: IReduxState, { message }: IProps) {
     const activeSearchMatch = getActiveChatSearchMatch(state);
     const isActiveSearchMatch = Boolean(activeSearchMatch && activeSearchMatch.messageId === message.messageId);
 
-    const participant = getParticipantById(state, message.participantId);
-
-    // For visitor private messages, participant will be undefined but we should still allow private chat
-    // Create a visitor participant object for visitor messages to pass to isPrivateChatEnabled
-    const participantForCheck = message.isFromVisitor
-        ? { id: message.participantId, name: message.displayName, isVisitor: true as const }
-        : participant;
-
-    const enablePrivateChat = (!message.isFromVisitor || message.privateMessage)
-        && isPrivateChatEnabled(participantForCheck, state);
-
     // Only the local messages appear on the right side of the chat therefore only for them the menu has to be on the
     // left side.
     const shouldDisplayMenuOnRight = message.messageType !== MESSAGE_TYPE_LOCAL;
 
     return {
         shouldDisplayMenuOnRight,
-        enablePrivateChat,
         isActiveSearchMatch,
         searchQuery: getChatSearchQuery(state),
         knocking,

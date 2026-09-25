@@ -16,21 +16,24 @@ import {
     OPEN_CHAT,
     REMOVE_LOBBY_CHAT_PARTICIPANT,
     RETRACT_MESSAGE,
+    SEND_BLOTTER_MESSAGE_STATUS,
     SEND_MESSAGE,
     SEND_MESSAGE_EDIT,
     SEND_MESSAGE_MODERATION,
     SEND_MESSAGE_RETRACTION,
     SEND_REACTION,
+    SET_BLOTTER_MESSAGE_FILTER,
     SET_CHAT_SEARCH_MATCH_INDEX,
     SET_CHAT_SEARCH_QUERY,
     SET_FOCUSED_TAB,
     SET_LOBBY_CHAT_ACTIVE_STATE,
     SET_LOBBY_CHAT_RECIPIENT,
     SET_MESSAGE_MODERATION_SUPPORTED,
-    SET_PRIVATE_MESSAGE_RECIPIENT
+    SET_PRIVATE_MESSAGE_RECIPIENT,
+    UPDATE_BLOTTER_MESSAGE_STATUS
 } from './actionTypes';
-import { ChatTabs } from './constants';
-import { IMessage } from './types';
+import { BlotterMessageStatus, ChatTabs } from './constants';
+import { BlotterMessageFilter, IMessage } from './types';
 
 /**
  * Adds a chat message to the collection of messages.
@@ -239,6 +242,49 @@ export function setChatSearchMatchIndex(index: number) {
     return {
         type: SET_CHAT_SEARCH_MATCH_INDEX,
         index
+    };
+}
+
+/**
+ * Sets whether the Blotter shows all messages or just the local participant's messages.
+ *
+ * @param {BlotterMessageFilter} filter - The selected filter.
+ * @returns {Object}
+ */
+export function setBlotterMessageFilter(filter: BlotterMessageFilter) {
+    return {
+        type: SET_BLOTTER_MESSAGE_FILTER,
+        filter
+    };
+}
+
+/**
+ * Requests a terminal status transition for a locally-authored Blotter message.
+ *
+ * @param {string} messageId - The message to update.
+ * @param {BlotterMessageStatus} status - The requested terminal state.
+ * @returns {Object}
+ */
+export function sendBlotterMessageStatus(messageId: string, status: BlotterMessageStatus) {
+    return {
+        type: SEND_BLOTTER_MESSAGE_STATUS,
+        messageId,
+        status
+    };
+}
+
+/**
+ * Applies an authorized status transition.
+ *
+ * @param {string} messageId - The message to update.
+ * @param {BlotterMessageStatus} status - The terminal state.
+ * @returns {Object}
+ */
+export function updateBlotterMessageStatus(messageId: string, status: BlotterMessageStatus) {
+    return {
+        type: UPDATE_BLOTTER_MESSAGE_STATUS,
+        messageId,
+        status
     };
 }
 

@@ -1,4 +1,4 @@
-import { UPDATE_CONFERENCE_METADATA } from '../base/conference/actionTypes';
+import { CONFERENCE_JOINED, UPDATE_CONFERENCE_METADATA } from '../base/conference/actionTypes';
 import { ILocalParticipant, IParticipant } from '../base/participants/types';
 import ReducerRegistry from '../base/redux/ReducerRegistry';
 import { ADD_FILE, _FILE_LIST_RECEIVED } from '../file-sharing/actionTypes';
@@ -16,6 +16,7 @@ import {
     OPEN_CHAT,
     REMOVE_LOBBY_CHAT_PARTICIPANT,
     RETRACT_MESSAGE,
+    SET_BLOTTER_MESSAGE_FILTER,
     SET_CHAT_IS_RESIZING,
     SET_CHAT_SEARCH_MATCH_INDEX,
     SET_CHAT_SEARCH_QUERY,
@@ -25,16 +26,18 @@ import {
     SET_LOBBY_CHAT_RECIPIENT,
     SET_MESSAGE_MODERATION_SUPPORTED,
     SET_PRIVATE_MESSAGE_RECIPIENT,
-    SET_USER_CHAT_WIDTH
+    SET_USER_CHAT_WIDTH,
+    UPDATE_BLOTTER_MESSAGE_STATUS
 } from './actionTypes';
-import { CHAT_SIZE, ChatTabs } from './constants';
+import { BLOTTER_STATUS_OPEN, CHAT_SIZE, ChatTabs } from './constants';
 import { addPendingEdit } from './functions';
-import { IMessage, IPendingEditsMap } from './types';
+import { BlotterMessageFilter, IMessage, IPendingEditsMap } from './types';
 
 const DEFAULT_STATE = {
     groupChatWithPermissions: false,
     isOpen: false,
     messageModerationSupported: false,
+    messageFilter: 'all' as BlotterMessageFilter,
     messages: [],
     notifyPrivateRecipientsChangedTimestamp: undefined,
     pendingEdits: {},
@@ -65,6 +68,7 @@ export interface IChatState {
         id: string;
         name: string;
     } | ILocalParticipant;
+    messageFilter: BlotterMessageFilter;
     messageModerationSupported: boolean;
     messages: IMessage[];
     notifyPrivateRecipientsChangedTimestamp?: number;
@@ -103,6 +107,7 @@ ReducerRegistry.register<IChatState>('features/chat', (state = DEFAULT_STATE, ac
             recipientId: action.recipientId,
             replyToMessageId: action.replyToMessageId,
             sentToVisitor: Boolean(action.sentToVisitor),
+            status: action.status || BLOTTER_STATUS_OPEN,
             timestamp: action.timestamp
         };
 
@@ -194,6 +199,13 @@ ReducerRegistry.register<IChatState>('features/chat', (state = DEFAULT_STATE, ac
         return {
             ...DEFAULT_STATE,
             width: state.width
+        };
+
+    case CONFERENCE_JOINED:
+        return {
+            ...state,
+            isOpen: true,
+            focusedTab: ChatTabs.CHAT
         };
 
     case EDIT_MESSAGE: {
@@ -303,6 +315,34 @@ ReducerRegistry.register<IChatState>('features/chat', (state = DEFAULT_STATE, ac
             searchMatchIndex: 0
         };
 
+    case SET_BLOTTER_MESSAGE_FILTER:
+        return {
+            ...state,
+            messageFilter: action.filter,
+            searchMatchIndex: 0
+        };
+
+    case UPDATE_BLOTTER_MESSAGE_STATUS: {
+        let updated = false;
+        const messages = state.messages.map(message => {
+            if (message.messageId !== action.messageId || message.status !== BLOTTER_STATUS_OPEN) {
+                return message;
+            }
+
+            updated = true;
+
+            return {
+                ...message,
+                status: action.status
+            };
+        });
+
+        return updated ? {
+            ...state,
+            messages
+        } : state;
+    }
+
     case SET_PRIVATE_MESSAGE_RECIPIENT:
         return {
             ...state,
@@ -319,7 +359,7 @@ ReducerRegistry.register<IChatState>('features/chat', (state = DEFAULT_STATE, ac
     case CLOSE_CHAT:
         return {
             ...state,
-            isOpen: false,
+            isOpen: true,
             lastReadMessage: state.messages[
                 navigator.product === 'ReactNative' ? 0 : state.messages.length - 1],
             privateMessageRecipient: action.participant,

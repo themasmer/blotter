@@ -8,7 +8,6 @@ import {
     IconArrowDown,
     IconArrowUp,
     IconCloseCircle,
-    IconCloseLarge,
     IconSearch
 } from '../../../base/icons/svg';
 import Input from '../../../base/ui/components/web/Input';
@@ -16,8 +15,7 @@ import { isFileSharingEnabled } from '../../../file-sharing/functions.any';
 import {
     clearChatSearch,
     setChatSearchMatchIndex,
-    setChatSearchQuery,
-    toggleChat
+    setChatSearchQuery
 } from '../../actions.web';
 import { ChatTabs } from '../../constants';
 import {
@@ -45,10 +43,6 @@ interface IProps {
      */
     isPollsEnabled: boolean;
 
-    /**
-     * Function to be called when pressing the close button.
-     */
-    onCancel: Function;
 }
 
 const useStyles = makeStyles()(theme => {
@@ -117,7 +111,7 @@ const useStyles = makeStyles()(theme => {
  *
  * @returns {React$Element<any>}
  */
-function ChatHeader({ className, isCCTabEnabled, isPollsEnabled, onCancel: onCancelProp }: IProps) {
+function ChatHeader({ className, isCCTabEnabled, isPollsEnabled }: IProps) {
     const { classes, cx } = useStyles();
     const dispatch = useDispatch();
     const { t } = useTranslation();
@@ -140,21 +134,6 @@ function ChatHeader({ className, isCCTabEnabled, isPollsEnabled, onCancel: onCan
     useEffect(() => {
         setInputValue(query);
     }, [ query ]);
-
-    const onCancel = useCallback(() => {
-        if (onCancelProp) {
-            onCancelProp();
-        } else {
-            dispatch(toggleChat());
-        }
-    }, [ onCancelProp ]);
-
-    const onKeyPressHandler = useCallback(e => {
-        if (onCancel && (e.key === ' ' || e.key === 'Enter')) {
-            e.preventDefault();
-            onCancel();
-        }
-    }, []);
 
     const onSearchToggle = useCallback(() => {
         setIsSearchOpen(open => !open);
@@ -228,17 +207,10 @@ function ChatHeader({ className, isCCTabEnabled, isPollsEnabled, onCancel: onCan
         }
     }, [ focusedTab ]);
 
-    let title = 'chat.title';
-
-    if (!_isChatDisabled && focusedTab === ChatTabs.CHAT) {
-        title = 'chat.tabs.chat';
-    } else if (isPollsEnabled && focusedTab === ChatTabs.POLLS) {
-        title = 'chat.tabs.polls';
-    } else if (isCCTabEnabled && focusedTab === ChatTabs.CLOSED_CAPTIONS) {
-        title = 'chat.tabs.closedCaptions';
-    } else if (fileSharingTabEnabled && focusedTab === ChatTabs.FILE_SHARING) {
-        title = 'chat.tabs.fileSharing';
-    } else {
+    if (!(!_isChatDisabled && focusedTab === ChatTabs.CHAT)
+            && !(isPollsEnabled && focusedTab === ChatTabs.POLLS)
+            && !(isCCTabEnabled && focusedTab === ChatTabs.CLOSED_CAPTIONS)
+            && !(fileSharingTabEnabled && focusedTab === ChatTabs.FILE_SHARING)) {
         // If the focused tab is not enabled, don't render the header.
         // This should not happen in normal circumstances since Chat.tsx already checks
         // if any tabs are available before rendering.
@@ -295,7 +267,7 @@ function ChatHeader({ className, isCCTabEnabled, isPollsEnabled, onCancel: onCan
                 <span
                     aria-level = { 1 }
                     role = 'heading'>
-                    { t(title) }
+                    { t('chat.title') }
                 </span>
             )}
             <div className = { classes.headerActions }>
@@ -307,13 +279,6 @@ function ChatHeader({ className, isCCTabEnabled, isPollsEnabled, onCancel: onCan
                         src = { IconSearch }
                         tabIndex = { 0 } />
                 )}
-                <Icon
-                    ariaLabel = { t('toolbar.closeChat') }
-                    onClick = { onCancel }
-                    onKeyPress = { onKeyPressHandler }
-                    role = 'button'
-                    src = { IconCloseLarge }
-                    tabIndex = { 0 } />
             </div>
         </div>
     );

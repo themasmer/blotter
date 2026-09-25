@@ -4,6 +4,7 @@ import { IStore } from '../app/types';
 import { IFileMetadata } from '../file-sharing/types';
 
 import {
+    BlotterMessageStatus,
     MESSAGE_TYPE_ERROR,
     MESSAGE_TYPE_LOCAL,
     MESSAGE_TYPE_REMOTE
@@ -41,8 +42,11 @@ export interface IMessage {
     replyToMessageId?: string;
     retractedBy?: string;
     sentToVisitor?: boolean;
+    status: BlotterMessageStatus;
     timestamp: number;
 }
+
+export type BlotterMessageFilter = 'all' | 'mine';
 
 /**
  * The type of the React {@code Component} props of {@code AbstractChat}.

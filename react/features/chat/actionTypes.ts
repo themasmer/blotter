@@ -96,7 +96,7 @@ export const SEND_MESSAGE = 'SEND_MESSAGE';
 
 /**
  * The type of the action which signals to moderates a chat message.
- * 
+ *
  * {
  *     type: SEND_MESSAGE_MODERATION,
  *     message: IMessage,
@@ -108,7 +108,7 @@ export const SEND_MESSAGE_MODERATION = 'SEND_MESSAGE_MODERATION';
 /*
  * The type of the action which signals a request to retract
  * (delete) a previously sent chat message.
- * 
+ *
  * {
  *     type: SEND_MESSAGE_RETRACTION,
  *     message: IMessage
@@ -158,6 +158,21 @@ export const SET_CHAT_SEARCH_MATCH_INDEX = 'SET_CHAT_SEARCH_MATCH_INDEX';
  * }
  */
 export const SET_CHAT_SEARCH_QUERY = 'SET_CHAT_SEARCH_QUERY';
+
+/**
+ * Sets the meeting-scoped Blotter message filter.
+ */
+export const SET_BLOTTER_MESSAGE_FILTER = 'SET_BLOTTER_MESSAGE_FILTER';
+
+/**
+ * Requests a terminal status transition for a locally-authored message.
+ */
+export const SEND_BLOTTER_MESSAGE_STATUS = 'SEND_BLOTTER_MESSAGE_STATUS';
+
+/**
+ * Applies an authorized Blotter message status transition.
+ */
+export const UPDATE_BLOTTER_MESSAGE_STATUS = 'UPDATE_BLOTTER_MESSAGE_STATUS';
 
 /**
  * The type of action which signals the initiation of sending of as private message to the
@@ -211,7 +226,7 @@ export const REMOVE_LOBBY_CHAT_PARTICIPANT = 'REMOVE_LOBBY_CHAT_PARTICIPANT';
 
 /**
  * The type of action which signals to delete your own message after sending it (self deletion).
- * 
+ *
  * {
  *     type: RETRACT_MESSAGE
  * }
@@ -247,13 +262,13 @@ export const SET_USER_CHAT_WIDTH = 'SET_USER_CHAT_WIDTH';
 export const SET_CHAT_IS_RESIZING = 'SET_CHAT_IS_RESIZING';
 
 /**
-  * The type of action sets the timestamp of the last private chat recipients list changed.
-  *
-  * {
-  *     type: NOTIFY_PRIVATE_RECIPIENTS_CHANGED
-  * }
-  */
- export const NOTIFY_PRIVATE_RECIPIENTS_CHANGED = 'NOTIFY_PRIVATE_RECIPIENTS_CHANGED';
+ * The type of action sets the timestamp of the last private chat recipients list changed.
+ *
+ * {
+ *     type: NOTIFY_PRIVATE_RECIPIENTS_CHANGED
+ * }
+ */
+export const NOTIFY_PRIVATE_RECIPIENTS_CHANGED = 'NOTIFY_PRIVATE_RECIPIENTS_CHANGED';
 
 /**
  * The type of action which sets whether the server handles message moderation

@@ -14,9 +14,6 @@ import { raiseHand } from '../base/participants/actions';
 import { getLocalParticipant, hasRaisedHand } from '../base/participants/functions';
 import { isToggleCameraEnabled } from '../base/tracks/functions.web';
 import { isInBreakoutRoom } from '../breakout-rooms/functions';
-import { toggleChat } from '../chat/actions.web';
-import { isChatDisabled } from '../chat/functions';
-import { useChatButton } from '../chat/hooks.web';
 import { useCustomPanelButton } from '../custom-panel/hooks.web';
 import { useEmbedButton } from '../embed-meeting/hooks';
 import { useEtherpadButton } from '../etherpad/hooks';
@@ -47,9 +44,8 @@ import { shouldDisplayReactionsButtons } from '../reactions/functions.any';
 import { useReactionsButton } from '../reactions/hooks.web';
 import { useLiveStreamingButton, useRecordingButton } from '../recording/hooks.web';
 import { isSalesforceEnabled } from '../salesforce/functions';
-import { startScreenShareFlow } from '../screen-share/actions.web';
 import ShareAudioButton from '../screen-share/components/web/ShareAudioButton';
-import { isScreenAudioSupported, isScreenVideoShared } from '../screen-share/functions';
+import { isScreenAudioSupported } from '../screen-share/functions';
 import { useSecurityDialogButton } from '../security/hooks.web';
 import SettingsButton from '../settings/components/web/SettingsButton';
 import { useSharedVideoButton } from '../shared-video/hooks';
@@ -76,7 +72,7 @@ import ProfileButton from './components/web/ProfileButton';
 import ShareDesktopButton from './components/web/ShareDesktopButton';
 import ToggleCameraButton from './components/web/ToggleCameraButton';
 import VideoSettingsButton from './components/web/VideoSettingsButton';
-import { isButtonEnabled, isDesktopShareButtonDisabled } from './functions.web';
+import { isButtonEnabled } from './functions.web';
 import { ICustomToolbarButton, IToolboxButton, ToolbarButton } from './types';
 
 
@@ -192,9 +188,7 @@ function useToggleCameraButton() {
  *  @returns {Object | undefined}
  */
 function getDesktopSharingButton() {
-    if (JitsiMeetJS.isDesktopSharingEnabled()) {
-        return desktop;
-    }
+    return desktop;
 }
 
 /**
@@ -291,7 +285,6 @@ export function useToolboxButtons(
     const reactions = useReactionsButton();
     const participants = useParticipantPaneButton();
     const tileview = useTileViewButton();
-    const chat = useChatButton();
     const cc = useClosedCaptionButton();
     const audioTranslation = useAudioTranslationButton();
     const polls = usePollsButton();
@@ -319,7 +312,6 @@ export function useToolboxButtons(
         camera,
         profile,
         desktop: desktopSharing,
-        chat,
         raisehand,
         reactions,
         'participants-pane': participants,
@@ -385,46 +377,11 @@ export const useKeyboardShortcuts = (toolbarButtons: Array<string>) => {
     const _shouldDisplayReactionsButtons = useSelector(shouldDisplayReactionsButtons);
     const _toolbarButtons = useSelector(
         (state: IReduxState) => toolbarButtons || state['features/toolbox'].toolbarButtons);
-    const chatOpen = useSelector((state: IReduxState) => state['features/chat'].isOpen);
-    const _isChatDisabled = useSelector(isChatDisabled);
-    const desktopSharingButtonDisabled = useSelector(isDesktopShareButtonDisabled);
-    const desktopSharingEnabled = JitsiMeetJS.isDesktopSharingEnabled();
     const fullScreen = useSelector((state: IReduxState) => state['features/toolbox'].fullScreen);
     const gifsEnabled = useSelector(isGifEnabled);
     const participantsPaneOpen = useSelector(getParticipantsPaneOpen);
     const raisedHand = useSelector((state: IReduxState) => hasRaisedHand(getLocalParticipant(state)));
-    const screenSharing = useSelector(isScreenVideoShared);
     const tileViewEnabled = useSelector(shouldDisplayTileView);
-
-    /**
-     * Creates an analytics keyboard shortcut event and dispatches an action for
-     * toggling the display of chat.
-     *
-     * @private
-     * @returns {void}
-     */
-    function onToggleChat() {
-        // Don't toggle chat if it's disabled.
-        if (_isChatDisabled) {
-            return false;
-        }
-
-        sendAnalytics(createShortcutEvent(
-            'toggle.chat',
-            ACTION_SHORTCUT_TRIGGERED,
-            {
-                enable: !chatOpen
-            }));
-
-        // Checks if there was any text selected by the user.
-        // Used for when we press simultaneously keys for copying
-        // text messages from the chat board
-        if (window.getSelection()?.toString() !== '') {
-            return false;
-        }
-
-        dispatch(toggleChat());
-    }
 
     /**
      * Creates an analytics keyboard shortcut event and dispatches an action for
@@ -513,30 +470,6 @@ export const useKeyboardShortcuts = (toolbarButtons: Array<string>) => {
 
     /**
      * Creates an analytics keyboard shortcut event and dispatches an action for
-     * toggling screensharing.
-     *
-     * @private
-     * @returns {void}
-     */
-    function onToggleScreenshare() {
-        // Ignore the shortcut if the button is disabled.
-        if (desktopSharingButtonDisabled) {
-            return;
-        }
-        sendAnalytics(createShortcutEvent(
-            'toggle.screen.sharing',
-            ACTION_SHORTCUT_TRIGGERED,
-            {
-                enable: !screenSharing
-            }));
-
-        if (desktopSharingEnabled && !desktopSharingButtonDisabled) {
-            dispatch(startScreenShareFlow(!screenSharing));
-        }
-    }
-
-    /**
-     * Creates an analytics keyboard shortcut event and dispatches an action for
      * toggling speaker stats.
      *
      * @private
@@ -558,16 +491,6 @@ export const useKeyboardShortcuts = (toolbarButtons: Array<string>) => {
                 character: 'A',
                 exec: onToggleVideoQuality,
                 helpDescription: 'toolbar.callQuality'
-            },
-            !_isChatDisabled && isButtonEnabled('chat', _toolbarButtons) && {
-                character: 'C',
-                exec: onToggleChat,
-                helpDescription: 'keyboardShortcuts.toggleChat'
-            },
-            isButtonEnabled('desktop', _toolbarButtons) && {
-                character: 'D',
-                exec: onToggleScreenshare,
-                helpDescription: 'keyboardShortcuts.toggleScreensharing'
             },
             _isParticipantsPaneEnabled && isButtonEnabled('participants-pane', _toolbarButtons) && {
                 character: 'P',
@@ -650,7 +573,7 @@ export const useKeyboardShortcuts = (toolbarButtons: Array<string>) => {
         }
 
         return () => {
-            [ 'A', 'C', 'D', 'P', 'R', 'S', 'W', 'T', 'G' ].forEach(letter =>
+            [ 'A', 'P', 'R', 'S', 'W', 'T', 'G' ].forEach(letter =>
                 dispatch(unregisterShortcut(letter)));
 
             if (_shouldDisplayReactionsButtons) {
@@ -661,14 +584,10 @@ export const useKeyboardShortcuts = (toolbarButtons: Array<string>) => {
         };
     }, [
         _shouldDisplayReactionsButtons,
-        chatOpen,
-        desktopSharingButtonDisabled,
-        desktopSharingEnabled,
         fullScreen,
         gifsEnabled,
         participantsPaneOpen,
         raisedHand,
-        screenSharing,
         tileViewEnabled
     ]);
 };
